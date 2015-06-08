@@ -59,12 +59,7 @@ class Schema extends \yii\db\Schema
     {
         parent::init();
 
-        $pdoAttributes = [
-            \PDO::ATTR_CASE => \PDO::CASE_LOWER,
-            \PDO::ATTR_STRINGIFY_FETCHES => true
-        ];
-
-        $this->db->attributes = is_array($this->db->attributes) ? array_merge($this->db->attributes, $pdoAttributes) : $pdoAttributes;
+//        $this->db->slavePdo->setAttribute(\PDO::ATTR_CASE, \PDO::CASE_LOWER);
 
         if (isset($this->defaultSchema)) {
             $this->db->createCommand('SET SCHEMA ' . $this->defaultSchema)->execute();
@@ -146,32 +141,32 @@ class Schema extends \yii\db\Schema
     {
         $sql = <<<SQL
             SELECT
-                c.colname AS name,
-                c.typename AS dbtype,
+               LOWER(c.colname) AS name,
+               LOWER(c.typename) AS dbtype,
                 c.default AS defaultvalue,
                 c.scale AS scale,
                 c.length AS size,
-                CASE WHEN c.nulls = 'Y'             THEN 1 ELSE 0 END AS allownull,
-                CASE WHEN c.keyseq IS NOT NULL      THEN 1 ELSE 0 END AS isprimarykey,
-                CASE WHEN c.identity = 'Y'          THEN 1 ELSE 0 END AS autoincrement,
-                c.remarks AS comment
+                CASE WHEN c.nulls = 'Y'         THEN 1 ELSE 0 END AS allownull,
+                CASE WHEN c.keyseq IS NOT NULL  THEN 1 ELSE 0 END AS isprimarykey,
+                CASE WHEN c.identity = 'Y'      THEN 1 ELSE 0 END AS autoincrement,
+                LOWER(c.remarks) AS comment
             FROM
                 syscat.columns AS c
             WHERE
-                c.tabname = :table
+                c.tabname = UPPER(:table)
 SQL;
 
         if (isset($table->schemaName)) {
-            $sql .= ' AND c.tabschema = :schema';
+            $sql .= ' AND c.tabschema = UPPER(:schema)';
         }
 
         $sql .= ' ORDER BY c.colno';
 
         $command = $this->db->createCommand($sql);
-        $command->bindValue(':table', strtoupper($table->name));
+        $command->bindValue(':table', $table->name);
 
         if (isset($table->schemaName)) {
-            $command->bindValue(':schema', strtoupper($table->schemaName));
+            $command->bindValue(':schema', $table->schemaName);
         }
 
         try {
@@ -186,6 +181,9 @@ SQL;
             throw $e;
         }
         foreach ($columns as $info) {
+            if ($this->db->slavePdo->getAttribute(\PDO::ATTR_CASE) !== \PDO::CASE_LOWER) {
+                $info = array_change_key_case($info, CASE_LOWER);
+            }
             $column = $this->loadColumnSchema($info);
             $table->columns[$column->name] = $column;
             if ($column->isPrimaryKey) {
@@ -202,41 +200,41 @@ SQL;
 
     private function findSequence($table)
     {
-        $sql = <<<SQL
-            SELECT
-                s.seqname as sequence
-            FROM
-                syscat.sequences AS s
-            INNER JOIN
-                syscat.tables AS t ON s.seqschema = t.tabschema AND s.create_time = t.create_time
-            INNER JOIN
-                syscat.columns AS c ON t.tabschema = c.tabschema AND t.tabname = c.tabname
-            WHERE
-                c.tabname = :table AND
-                c.identity = 'Y'
-SQL;
-        if (isset($table->schemaName)) {
-            $sql .= ' AND c.tabschema = :schema';
-        }
-
-        $command = $this->db->createCommand($sql);
-        $command->bindValue(':table', $table->name);
-
-        if (isset($table->schemaName)) {
-            $command->bindValue(':schema', $table->schemaName);
-        }
-
-        $sequence = $command->queryColumn();
-        $table->sequenceName = $sequence;
+//        $sql = <<<SQL
+//            SELECT
+//                s.seqname as sequence
+//            FROM
+//                syscat.sequences AS s
+//            INNER JOIN
+//                syscat.tables AS t ON s.seqschema = t.tabschema AND s.create_time = t.create_time
+//            INNER JOIN
+//                syscat.columns AS c ON t.tabschema = c.tabschema AND t.tabname = c.tabname
+//            WHERE
+//                c.tabname = :table AND
+//                c.identity = 'Y'
+//SQL;
+//        if (isset($table->schemaName)) {
+//            $sql .= ' AND c.tabschema = :schema';
+//        }
+//
+//        $command = $this->db->createCommand($sql);
+//        $command->bindValue(':table', strtoupper($table->name));
+//
+//        if (isset($table->schemaName)) {
+//            $command->bindValue(':schema', strtoupper($table->schemaName));
+//        }
+//
+//        $sequence = $command->queryColumn();
+//        $table->sequenceName = $sequence;
     }
 
     protected function findConstraints($table)
     {
         $sql = <<<SQL
             SELECT
-                pk.tabname AS tablename,
-                fk.colname AS fk,
-                pk.colname AS pk
+                LOWER(pk.tabname) AS tablename,
+                LOWER(fk.colname) AS fk,
+                LOWER(pk.colname) AS pk
             FROM
                 syscat.references AS ref
             INNER JOIN
@@ -244,18 +242,18 @@ SQL;
             INNER JOIN
                 syscat.keycoluse AS pk ON ref.refkeyname = pk.constname AND pk.colseq = fk.colseq
             WHERE
-                fk.tabname = :table
+                fk.tabname = UPPER(:table)
 SQL;
 
         if (isset($table->schemaName)) {
-            $sql .= ' AND fk.tabschema = :schema';
+            $sql .= ' AND fk.tabschema = UPPER(:schema)';
         }
 
         $command = $this->db->createCommand($sql);
-        $command->bindValue(':table', strtoupper($table->name));
+        $command->bindValue(':table', $table->name);
 
         if (isset($table->schemaName)) {
-            $command->bindValue(':schema', strtoupper($table->schemaName));
+            $command->bindValue(':schema', $table->schemaName);
         }
 
         $results = $command->queryAll();
@@ -275,6 +273,9 @@ SQL;
          */
         $foreignKeys = [];
         foreach ($results as $result) {
+            if ($this->db->slavePdo->getAttribute(\PDO::ATTR_CASE) !== \PDO::CASE_LOWER) {
+                $result = array_change_key_case($result, CASE_LOWER);
+            }
             $tablename = $result['tablename'];
             $fk = $result['fk'];
             $pk = $result['pk'];
@@ -318,27 +319,27 @@ SQL;
 //        ]
         $sql = <<<SQL
             SELECT
-                i.indname AS indexname,
-                ic.colname AS column
+                LOWER(i.indname) AS indexname,
+                LOWER(ic.colname) AS column
             FROM
                 syscat.indexes AS i
             INNER JOIN
                 syscat.indexcoluse AS ic ON i.indname = ic.indname
             WHERE
-                i.tabname = :table
+                i.tabname = UPPER(:table)
 SQL;
 
         if (isset($table->schemaName)) {
-            $sql .= ' AND tabschema = :schema';
+            $sql .= ' AND tabschema = UPPER(:schema)';
         }
 
         $sql .= ' ORDER BY ic.colseq';
 
         $command = $this->db->createCommand($sql);
-        $command->bindValue(':table', strtoupper($table->name));
+        $command->bindValue(':table', $table->name);
 
         if (isset($table->schemaName)) {
-            $command->bindValue(':schema', strtoupper($table->schemaName));
+            $command->bindValue(':schema', $table->schemaName);
         }
 
         $results = $command->queryAll();
@@ -352,6 +353,9 @@ SQL;
          */
         $indexes = [];
         foreach ($results as $result) {
+            if ($this->db->slavePdo->getAttribute(\PDO::ATTR_CASE) !== \PDO::CASE_LOWER) {
+                $result = array_change_key_case($result, CASE_LOWER);
+            }
             /*
              * [
              *      'indexname' => ['col1', 'col2', ...]
@@ -366,7 +370,7 @@ SQL;
     {
         $sql = <<<SQL
             SELECT
-                t.tabname
+                LOWER(t.tabname)
             FROM
                 syscat.tables AS t
             WHERE
@@ -374,13 +378,13 @@ SQL;
                 t.ownertype != 'S'
 SQL;
         if ($schema !== '') {
-            $sql .= ' AND t.tabschema = :schema';
+            $sql .= ' AND t.tabschema = UPPER(:schema)';
         }
 
         $command = $this->db->createCommand($sql);
 
         if ($schema !== '') {
-            $command->bindParam(':schema', $schema);
+            $command->bindValue(':schema', $schema);
         }
 
         return $command->queryColumn();
