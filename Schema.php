@@ -65,7 +65,10 @@ class Schema extends \yii\db\Schema
         ];
 
         $this->db->attributes = is_array($this->db->attributes) ? array_merge($this->db->attributes, $pdoAttributes) : $pdoAttributes;
-        $this->db->createCommand('SET SCHEMA ' . $this->defaultSchema)->execute();
+
+        if (isset($this->defaultSchema)) {
+            $this->db->createCommand('SET SCHEMA ' . $this->defaultSchema)->execute();
+        }
     }
 
     public function quoteSimpleTableName($name)
