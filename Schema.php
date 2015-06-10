@@ -1,11 +1,5 @@
 <?php
 
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
-
 namespace yii\db\db2;
 
 use yii\db\Exception;
@@ -59,21 +53,19 @@ class Schema extends \yii\db\Schema
     {
         parent::init();
 
-//        $this->db->slavePdo->setAttribute(\PDO::ATTR_CASE, \PDO::CASE_LOWER);
-
         if (isset($this->defaultSchema)) {
-            $this->db->createCommand('SET SCHEMA ' . $this->defaultSchema)->execute();
+            $this->db->createCommand('SET SCHEMA ' . strtoupper($this->defaultSchema))->execute();
         }
     }
 
     public function quoteSimpleTableName($name)
     {
-        return strpos($name, '"') !== false ? $name : '"' . $name . '"';
+        return strtoupper(strpos($name, '"') !== false ? $name : '"' . $name . '"');
     }
 
     public function quoteSimpleColumnName($name)
     {
-        return strpos($name, '"') !== false || $name === '*' ? $name : '"' . $name . '"';
+        return strtoupper(strpos($name, '"') !== false || $name === '*' ? $name : '"' . $name . '"');
     }
 
     public function createQueryBuilder()
@@ -141,15 +133,15 @@ class Schema extends \yii\db\Schema
     {
         $sql = <<<SQL
             SELECT
-               LOWER(c.colname) AS name,
-               LOWER(c.typename) AS dbtype,
+                LOWER(c.colname) AS name,
+                LOWER(c.typename) AS dbtype,
                 c.default AS defaultvalue,
                 c.scale AS scale,
                 c.length AS size,
                 CASE WHEN c.nulls = 'Y'         THEN 1 ELSE 0 END AS allownull,
                 CASE WHEN c.keyseq IS NOT NULL  THEN 1 ELSE 0 END AS isprimarykey,
                 CASE WHEN c.identity = 'Y'      THEN 1 ELSE 0 END AS autoincrement,
-                LOWER(c.remarks) AS comment
+                c.remarks AS comment
             FROM
                 syscat.columns AS c
             WHERE
@@ -188,11 +180,10 @@ SQL;
             $table->columns[$column->name] = $column;
             if ($column->isPrimaryKey) {
                 $table->primaryKey[] = $column->name;
-//                if ($column->autoIncrement) {
+                if ($column->autoIncrement) {
 //                    $table->sequenceName = '';
-//                } else {
-//                    $this->findSequence($table);
-//                }
+                    $this->findSequence($table);
+                }
             }
         }
         return true;
@@ -200,32 +191,31 @@ SQL;
 
     private function findSequence($table)
     {
-//        $sql = <<<SQL
-//            SELECT
-//                s.seqname as sequence
-//            FROM
-//                syscat.sequences AS s
-//            INNER JOIN
-//                syscat.tables AS t ON s.seqschema = t.tabschema AND s.create_time = t.create_time
-//            INNER JOIN
-//                syscat.columns AS c ON t.tabschema = c.tabschema AND t.tabname = c.tabname
-//            WHERE
-//                c.tabname = :table AND
-//                c.identity = 'Y'
-//SQL;
-//        if (isset($table->schemaName)) {
-//            $sql .= ' AND c.tabschema = :schema';
-//        }
-//
-//        $command = $this->db->createCommand($sql);
-//        $command->bindValue(':table', strtoupper($table->name));
-//
-//        if (isset($table->schemaName)) {
-//            $command->bindValue(':schema', strtoupper($table->schemaName));
-//        }
-//
-//        $sequence = $command->queryColumn();
-//        $table->sequenceName = $sequence;
+        $sql = <<<SQL
+            SELECT
+                LOWER(s.seqname) as sequence
+            FROM
+                syscat.sequences AS s
+            INNER JOIN
+                syscat.tables AS t ON s.seqschema = t.tabschema AND s.create_time = t.create_time
+            INNER JOIN
+                syscat.columns AS c ON t.tabschema = c.tabschema AND t.tabname = c.tabname
+            WHERE
+                c.tabname = UPPER(:table) AND
+                c.identity = 'Y'
+SQL;
+        if (isset($table->schemaName)) {
+            $sql .= ' AND c.tabschema = UPPER(:schema)';
+        }
+
+        $command = $this->db->createCommand($sql);
+        $command->bindValue(':table', $table->name);
+
+        if (isset($table->schemaName)) {
+            $command->bindValue(':schema', $table->schemaName);
+        }
+
+        $table->sequenceName = $command->queryColumn();
     }
 
     protected function findConstraints($table)
@@ -313,10 +303,6 @@ SQL;
 
     public function findUniqueIndexes($table)
     {
-//        [
-//          'IndexName1' => ['col1' [, ...]],
-//          'IndexName2' => ['col2' [, ...]],
-//        ]
         $sql = <<<SQL
             SELECT
                 LOWER(i.indname) AS indexname,
@@ -343,24 +329,11 @@ SQL;
         }
 
         $results = $command->queryAll();
-        /*  [
-         *      'indexname',
-         *      'col1',
-         *  ], [
-         *      'indexname',
-         *      'col2'
-         *  ]
-         */
         $indexes = [];
         foreach ($results as $result) {
             if ($this->db->slavePdo->getAttribute(\PDO::ATTR_CASE) !== \PDO::CASE_LOWER) {
                 $result = array_change_key_case($result, CASE_LOWER);
             }
-            /*
-             * [
-             *      'indexname' => ['col1', 'col2', ...]
-             * ]
-             */
             $indexes[$result['indexname']][] = $result['column'];
         }
         return $indexes;
