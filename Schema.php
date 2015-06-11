@@ -53,6 +53,9 @@ class Schema extends \yii\db\Schema
     {
         parent::init();
 
+        $this->db->slavePdo->setAttribute(\PDO::ATTR_CASE, \PDO::CASE_LOWER);
+        $this->db->slavePdo->setAttribute(\PDO::ATTR_STRINGIFY_FETCHES, true);
+
         if (isset($this->defaultSchema)) {
             $this->db->createCommand('SET SCHEMA ' . strtoupper($this->defaultSchema))->execute();
         }
@@ -114,7 +117,7 @@ class Schema extends \yii\db\Schema
         $column->autoIncrement = $info['autoincrement'] === '1';
         // DB2 does not support unsigned values.
         $column->unsigned = false;
-        $column->type = $this->typeMap[strtolower($info['dbtype'])];
+        $column->type = $this->typeMap[$info['dbtype']];
         $column->enumValues = null;
         $column->comment = isset($info['comment']) ? $info['comment'] : null;
 
@@ -173,9 +176,6 @@ SQL;
             throw $e;
         }
         foreach ($columns as $info) {
-            if ($this->db->slavePdo->getAttribute(\PDO::ATTR_CASE) !== \PDO::CASE_LOWER) {
-                $info = array_change_key_case($info, CASE_LOWER);
-            }
             $column = $this->loadColumnSchema($info);
             $table->columns[$column->name] = $column;
             if ($column->isPrimaryKey) {
@@ -263,9 +263,6 @@ SQL;
          */
         $foreignKeys = [];
         foreach ($results as $result) {
-            if ($this->db->slavePdo->getAttribute(\PDO::ATTR_CASE) !== \PDO::CASE_LOWER) {
-                $result = array_change_key_case($result, CASE_LOWER);
-            }
             $tablename = $result['tablename'];
             $fk = $result['fk'];
             $pk = $result['pk'];
@@ -331,9 +328,6 @@ SQL;
         $results = $command->queryAll();
         $indexes = [];
         foreach ($results as $result) {
-            if ($this->db->slavePdo->getAttribute(\PDO::ATTR_CASE) !== \PDO::CASE_LOWER) {
-                $result = array_change_key_case($result, CASE_LOWER);
-            }
             $indexes[$result['indexname']][] = $result['column'];
         }
         return $indexes;
