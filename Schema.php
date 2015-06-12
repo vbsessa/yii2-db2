@@ -14,25 +14,19 @@ use yii\db\TableSchema;
 class Schema extends \yii\db\Schema
 {
     public $typeMap = [
-        // Character Strings Types
         'character' => self::TYPE_STRING,
         'varchar' => self::TYPE_STRING,
         'clob' => self::TYPE_TEXT,
-        // Graphic Strings Types
         'graphic' => self::TYPE_STRING,
         'vargraphic' => self::TYPE_STRING,
         'dbclob' => self::TYPE_TEXT,
-        // National Charater Strings Types
         'nchar' => self::TYPE_STRING,
         'nvarchar' => self::TYPE_STRING,
         'nclob' => self::TYPE_TEXT,
-        // Binary Strings Types
         'binary' => self::TYPE_BINARY,
         'varbinary' => self::TYPE_BINARY,
         'blob' => self::TYPE_BINARY,
-        // Boolean Types
         'boolean' => self::TYPE_BOOLEAN,
-        // Numeric Types
         'smallint' => self::TYPE_SMALLINT,
         'int' => self::TYPE_INTEGER,
         'integer' => self::TYPE_INTEGER,
@@ -43,39 +37,57 @@ class Schema extends \yii\db\Schema
         'float' => self::TYPE_FLOAT,
         'double' => self::TYPE_FLOAT,
         'decfloat' => self::TYPE_FLOAT,
-        // Datetime types
         'date' => self::TYPE_DATE,
         'time' => self::TYPE_TIME,
         'timestamp' => self::TYPE_TIMESTAMP
     ];
 
+    /**
+     *
+     * @inheritdoc
+     */
     public function init()
     {
         parent::init();
 
-        $this->db->slavePdo->setAttribute(\PDO::ATTR_CASE, \PDO::CASE_LOWER);
-        $this->db->slavePdo->setAttribute(\PDO::ATTR_STRINGIFY_FETCHES, true);
+        $this->db->slavePdo->setAttribute(\PDO::ATTR_CASE, \PDO::CASE_NATURAL);
 
         if (isset($this->defaultSchema)) {
-            $this->db->createCommand('SET SCHEMA ' . strtoupper($this->defaultSchema))->execute();
+            $this->db->createCommand('SET SCHEMA ' . $this->quoteSimpleTableName($this->defaultSchema))->execute();
         }
     }
 
+    /**
+     *
+     * @inheritdoc
+     */
     public function quoteSimpleTableName($name)
     {
-        return strtoupper(strpos($name, '"') !== false ? $name : '"' . $name . '"');
+        return strpos($name, '"') !== false ? $name : '"' . $name . '"';
     }
 
+    /**
+     *
+     * @inheritdoc
+     */
     public function quoteSimpleColumnName($name)
     {
-        return strtoupper(strpos($name, '"') !== false || $name === '*' ? $name : '"' . $name . '"');
+        return strpos($name, '"') !== false || $name === '*' ? $name : '"' . $name . '"';
     }
 
+    /**
+     *
+     * @inheritdoc
+     */
     public function createQueryBuilder()
     {
         return new QueryBuilder($this->db);
     }
 
+    /**
+     *
+     * @inheritdoc
+     */
     protected function loadTableSchema($name)
     {
         $table = new TableSchema();
@@ -89,6 +101,10 @@ class Schema extends \yii\db\Schema
         }
     }
 
+    /**
+     *
+     * @inheritdoc
+     */
     protected function resolveTableNames($table, $name)
     {
         $parts = explode('.', str_replace('"', '', $name));
@@ -101,23 +117,25 @@ class Schema extends \yii\db\Schema
         }
     }
 
+    /**
+     *
+     * @inheritdoc
+     */
     protected function loadColumnSchema($info)
     {
         $column = $this->createColumnSchema();
 
         $column->name = $info['name'];
         $column->dbType = $info['dbtype'];
-        $column->defaultValue = $info['defaultvalue'];
+        $column->defaultValue = isset($info['defaultvalue']) ? $info['defaultvalue'] : null;
         $column->scale = $info['scale'];
-        // Type precision is given by 'length';
         $column->size = $info['size'];
         $column->precision = $info['size'];
         $column->allowNull = $info['allownull'] === '1';
         $column->isPrimaryKey = $info['isprimarykey'] === '1';
         $column->autoIncrement = $info['autoincrement'] === '1';
-        // DB2 does not support unsigned values.
         $column->unsigned = false;
-        $column->type = $this->typeMap[$info['dbtype']];
+        $column->type = $this->typeMap[strtolower($info['dbtype'])];
         $column->enumValues = null;
         $column->comment = isset($info['comment']) ? $info['comment'] : null;
 
@@ -132,12 +150,16 @@ class Schema extends \yii\db\Schema
         return $column;
     }
 
+    /**
+     *
+     * @inheritdoc
+     */
     protected function findColumns($table)
     {
         $sql = <<<SQL
             SELECT
-                LOWER(c.colname) AS name,
-                LOWER(c.typename) AS dbtype,
+                c.colname AS name,
+                c.typename AS dbtype,
                 c.default AS defaultvalue,
                 c.scale AS scale,
                 c.length AS size,
@@ -148,11 +170,11 @@ class Schema extends \yii\db\Schema
             FROM
                 syscat.columns AS c
             WHERE
-                c.tabname = UPPER(:table)
+                c.tabname = :table
 SQL;
 
         if (isset($table->schemaName)) {
-            $sql .= ' AND c.tabschema = UPPER(:schema)';
+            $sql .= ' AND c.tabschema = :schema';
         }
 
         $sql .= ' ORDER BY c.colno';
@@ -176,55 +198,30 @@ SQL;
             throw $e;
         }
         foreach ($columns as $info) {
+            if ($this->db->slavePdo->getAttribute(\PDO::ATTR_CASE) !== \PDO::CASE_LOWER) {
+                $info = array_change_key_case($info, CASE_LOWER);
+            }
             $column = $this->loadColumnSchema($info);
             $table->columns[$column->name] = $column;
+            $table->sequenceName = '';
             if ($column->isPrimaryKey) {
                 $table->primaryKey[] = $column->name;
-                if ($column->autoIncrement) {
-//                    $table->sequenceName = '';
-                    $this->findSequence($table);
-                }
             }
         }
         return true;
     }
 
-    private function findSequence($table)
-    {
-        $sql = <<<SQL
-            SELECT
-                LOWER(s.seqname) as sequence
-            FROM
-                syscat.sequences AS s
-            INNER JOIN
-                syscat.tables AS t ON s.seqschema = t.tabschema AND s.create_time = t.create_time
-            INNER JOIN
-                syscat.columns AS c ON t.tabschema = c.tabschema AND t.tabname = c.tabname
-            WHERE
-                c.tabname = UPPER(:table) AND
-                c.identity = 'Y'
-SQL;
-        if (isset($table->schemaName)) {
-            $sql .= ' AND c.tabschema = UPPER(:schema)';
-        }
-
-        $command = $this->db->createCommand($sql);
-        $command->bindValue(':table', $table->name);
-
-        if (isset($table->schemaName)) {
-            $command->bindValue(':schema', $table->schemaName);
-        }
-
-        $table->sequenceName = $command->queryColumn();
-    }
-
+    /**
+     *
+     * @inheritdoc
+     */
     protected function findConstraints($table)
     {
         $sql = <<<SQL
             SELECT
-                LOWER(pk.tabname) AS tablename,
-                LOWER(fk.colname) AS fk,
-                LOWER(pk.colname) AS pk
+                pk.tabname AS tablename,
+                fk.colname AS fk,
+                pk.colname AS pk
             FROM
                 syscat.references AS ref
             INNER JOIN
@@ -232,11 +229,11 @@ SQL;
             INNER JOIN
                 syscat.keycoluse AS pk ON ref.refkeyname = pk.constname AND pk.colseq = fk.colseq
             WHERE
-                fk.tabname = UPPER(:table)
+                fk.tabname = :table
 SQL;
 
         if (isset($table->schemaName)) {
-            $sql .= ' AND fk.tabschema = UPPER(:schema)';
+            $sql .= ' AND fk.tabschema = :schema';
         }
 
         $command = $this->db->createCommand($sql);
@@ -247,73 +244,45 @@ SQL;
         }
 
         $results = $command->queryAll();
-        /*
-         * result format:
-         * [
-         *      'tablename' => 'foreignTableName1',
-         *      'fk' => 'fk1,
-         *      'pk' => 'pk1',
-         * ],[
-         *      'tablename' => 'foreignTableName2',
-         *      'fk' => 'fk2',
-         *      'pk' => 'pk2',
-         * ], [
-         * ...
-         * ]
-         */
         $foreignKeys = [];
         foreach ($results as $result) {
+            if ($this->db->slavePdo->getAttribute(\PDO::ATTR_CASE) !== \PDO::CASE_LOWER) {
+                $result = array_change_key_case($result, CASE_LOWER);
+            }
             $tablename = $result['tablename'];
             $fk = $result['fk'];
             $pk = $result['pk'];
-            /*
-             * intermediary format:
-             * [
-             *      'foreignTableName' => [
-             *          'fk1' => 'pk1',
-             *          'fk2' => 'pk2',
-             *          ...
-             *      ]
-             * ]
-             */
             $foreignKeys[$tablename][$fk] = $pk;
         }
-        foreach ($foreignKeys as $tablename => $constraints) {
-            /*
-             * final format:
-             * [
-             *      'foreignTableName',
-             *      'fk1' => 'pk1',
-             *      'fk2' => 'pk2',
-             *      ...
-             * ], [
-             *      ...
-             * ]
-             */
-            $foreignKey = [$tablename];
-            foreach ($constraints as $fk => $pk) {
-                $foreignKey[$fk] = $pk;
+        foreach ($foreignKeys as $tablename => $keymap) {
+            $constraint = [$tablename];
+            foreach ($keymap as $fk => $pk) {
+                $constraint[$fk] = $pk;
             }
-            $table->foreignKeys[] = $foreignKey;
+            $table->foreignKeys[] = $constraint;
         }
     }
 
+    /**
+     *
+     * @inheritdoc
+     */
     public function findUniqueIndexes($table)
     {
         $sql = <<<SQL
             SELECT
-                LOWER(i.indname) AS indexname,
-                LOWER(ic.colname) AS column
+                i.indname AS indexname,
+                ic.colname AS column
             FROM
                 syscat.indexes AS i
             INNER JOIN
                 syscat.indexcoluse AS ic ON i.indname = ic.indname
             WHERE
-                i.tabname = UPPER(:table)
+                i.tabname = :table
 SQL;
 
         if (isset($table->schemaName)) {
-            $sql .= ' AND tabschema = UPPER(:schema)';
+            $sql .= ' AND tabschema = :schema';
         }
 
         $sql .= ' ORDER BY ic.colseq';
@@ -328,16 +297,23 @@ SQL;
         $results = $command->queryAll();
         $indexes = [];
         foreach ($results as $result) {
+            if ($this->db->slavePdo->getAttribute(\PDO::ATTR_CASE) !== \PDO::CASE_LOWER) {
+                $result = array_change_key_case($result, CASE_LOWER);
+            }
             $indexes[$result['indexname']][] = $result['column'];
         }
         return $indexes;
     }
 
+    /**
+     *
+     * @inheritdoc
+     */
     protected function findTableNames($schema = '')
     {
         $sql = <<<SQL
             SELECT
-                LOWER(t.tabname)
+                t.tabname
             FROM
                 syscat.tables AS t
             WHERE
@@ -345,7 +321,7 @@ SQL;
                 t.ownertype != 'S'
 SQL;
         if ($schema !== '') {
-            $sql .= ' AND t.tabschema = UPPER(:schema)';
+            $sql .= ' AND t.tabschema = :schema';
         }
 
         $command = $this->db->createCommand($sql);
