@@ -2,6 +2,8 @@
 
 namespace yii\db\db2;
 
+use PDO;
+use PDOException;
 use yii\db\Exception;
 use yii\db\QueryBuilder;
 use yii\db\TableSchema;
@@ -26,7 +28,6 @@ class Schema extends \yii\db\Schema
         'binary' => self::TYPE_BINARY,
         'varbinary' => self::TYPE_BINARY,
         'blob' => self::TYPE_BINARY,
-        'boolean' => self::TYPE_BOOLEAN,
         'smallint' => self::TYPE_SMALLINT,
         'int' => self::TYPE_INTEGER,
         'integer' => self::TYPE_INTEGER,
@@ -50,7 +51,7 @@ class Schema extends \yii\db\Schema
     {
         parent::init();
 
-        $this->db->slavePdo->setAttribute(\PDO::ATTR_CASE, \PDO::CASE_NATURAL);
+        $this->db->slavePdo->setAttribute(PDO::ATTR_CASE, PDO::CASE_NATURAL);
 
         if (isset($this->defaultSchema)) {
             $this->db->createCommand('SET SCHEMA ' . $this->quoteSimpleTableName($this->defaultSchema))->execute();
@@ -192,13 +193,13 @@ SQL;
             $previous = $e->getPrevious();
             // table does not exist
             // SQLSTATE 42704 An undefined object or constraint name was detected.
-            if ($previous instanceof \PDOException && strpos($previous->getMessage(), 'SQLSTATE[42704') != false) {
+            if ($previous instanceof PDOException && strpos($previous->getMessage(), 'SQLSTATE[42704') != false) {
                 return false;
             }
             throw $e;
         }
         foreach ($columns as $info) {
-            if ($this->db->slavePdo->getAttribute(\PDO::ATTR_CASE) !== \PDO::CASE_LOWER) {
+            if ($this->db->slavePdo->getAttribute(PDO::ATTR_CASE) !== PDO::CASE_LOWER) {
                 $info = array_change_key_case($info, CASE_LOWER);
             }
             $column = $this->loadColumnSchema($info);
@@ -246,7 +247,7 @@ SQL;
         $results = $command->queryAll();
         $foreignKeys = [];
         foreach ($results as $result) {
-            if ($this->db->slavePdo->getAttribute(\PDO::ATTR_CASE) !== \PDO::CASE_LOWER) {
+            if ($this->db->slavePdo->getAttribute(PDO::ATTR_CASE) !== PDO::CASE_LOWER) {
                 $result = array_change_key_case($result, CASE_LOWER);
             }
             $tablename = $result['tablename'];
@@ -297,7 +298,7 @@ SQL;
         $results = $command->queryAll();
         $indexes = [];
         foreach ($results as $result) {
-            if ($this->db->slavePdo->getAttribute(\PDO::ATTR_CASE) !== \PDO::CASE_LOWER) {
+            if ($this->db->slavePdo->getAttribute(PDO::ATTR_CASE) !== PDO::CASE_LOWER) {
                 $result = array_change_key_case($result, CASE_LOWER);
             }
             $indexes[$result['indexname']][] = $result['column'];
@@ -320,6 +321,7 @@ SQL;
                 t.type in ('T', 'V') AND
                 t.ownertype != 'S'
 SQL;
+
         if ($schema !== '') {
             $sql .= ' AND t.tabschema = :schema';
         }
@@ -332,5 +334,4 @@ SQL;
 
         return $command->queryColumn();
     }
-
 }

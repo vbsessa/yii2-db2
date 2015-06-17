@@ -14,8 +14,8 @@
 class QueryBuilder extends \yii\db\QueryBuilder
 {
     public $typeMap = [
-        Schema::TYPE_PK => 'integer NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1)',
-        Schema::TYPE_BIGPK => 'bigint NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1)',
+        Schema::TYPE_PK => 'integer NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1)',
+        Schema::TYPE_BIGPK => 'bigint NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1)',
         Schema::TYPE_STRING => 'varchar(255)',
         Schema::TYPE_TEXT => 'clob',
         Schema::TYPE_SMALLINT => 'smallint',
@@ -29,7 +29,7 @@ class QueryBuilder extends \yii\db\QueryBuilder
         Schema::TYPE_TIME => 'time',
         Schema::TYPE_DATE => 'date',
         Schema::TYPE_BINARY => 'blob',
-        Schema::TYPE_BOOLEAN => 'boolean',
+        Schema::TYPE_BOOLEAN => 'char(1)',
         Schema::TYPE_MONEY => 'decimal(19,4)',
     ];
 
@@ -39,7 +39,7 @@ class QueryBuilder extends \yii\db\QueryBuilder
             if ($value === null) {
                 $value = $this->getDbConnection()->createCommand("SELECT MAX({$table->primaryKey}) FROM {$table->fullName}")->queryScalar() + 1;
             } else {
-                $value = (int) $value;
+                $value = (int)$value;
             }
             $this->getDbConnection()->createCommand("ALTER TABLE {$table->fullName} ALTER COLUMN {$table->primaryKey} RESTART WITH $value")->execute();
         }
