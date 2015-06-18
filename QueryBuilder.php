@@ -1,18 +1,8 @@
 <?php
 
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
-
-/**
- * Description of QueryBuilder
- *
- * @author Vicente Bissoli Sessa
- */
 class QueryBuilder extends \yii\db\QueryBuilder
 {
+    public $_mysql;
     public $typeMap = [
         Schema::TYPE_PK => 'integer NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1)',
         Schema::TYPE_BIGPK => 'bigint NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1)',
@@ -37,11 +27,11 @@ class QueryBuilder extends \yii\db\QueryBuilder
     {
         if ($table->sequenceName !== null && is_string($table->primaryKey) && $table->columns[$table->primaryKey]->autoIncrement) {
             if ($value === null) {
-                $value = $this->getDbConnection()->createCommand("SELECT MAX({$table->primaryKey}) FROM {$table->fullName}")->queryScalar() + 1;
+                $value = $this->db->createCommand("SELECT MAX({$table->primaryKey}) FROM {$table->fullName}")->queryScalar() + 1;
             } else {
-                $value = (int)$value;
+                $value = (int) $value;
             }
-            $this->getDbConnection()->createCommand("ALTER TABLE {$table->fullName} ALTER COLUMN {$table->primaryKey} RESTART WITH $value")->execute();
+            $this->db->createCommand("ALTER TABLE {$table->fullName} ALTER COLUMN {$table->primaryKey} RESTART WITH $value")->execute();
         }
     }
 
@@ -53,6 +43,34 @@ class QueryBuilder extends \yii\db\QueryBuilder
         foreach ($tableNames as $tableName) {
             $db->createCommand("SET INTEGRITY FOR $tableName ALL IMMEDIATE $enable")->execute();
         }
+    }
+
+    public function buildOrderByAndLimit($sql, $orderBy, $limit, $offset)
+    {
+        $orderBy = $this->buildOrderBy($orderBy);
+        if ($orderBy !== '') {
+            $sql .= $this->separator . $orderBy;
+        }
+
+        $limit = $this->buildLimit($limit, $offset);
+        if ($limit != '') {
+            $sql = str_replace(':original_query', $limit, $sql);
+        }
+        return $sql;
+    }
+
+    public function buildLimit($limit, $offset)
+    {
+        if (!$this->hasLimit($limit) && !$this->hasOffset($offset)) {
+            return '';
+        }
+
+        $sql = 'SELECT * FROM (SELECT _SUBQUERY.*, ROW_NUMBER() OVER() AS _RN FROM ( :original_query ) AS _SUBQUERY) WHERE :offset_condition :limit_condition';
+
+        $sql = $this->hasOffset($offset) ? str_replace(':offset_condition', '_RN > ' . $offset, $sql) : str_replace(':offset_condition', '_RN > 0', $sql);
+        $sql = $this->hasLimit($limit) ? str_replace(':limit_condition', 'AND _RN <= ' . ($limit + $offset), $sql) : str_replace(':limit_condition', '', $sql);
+
+        return $sql;
     }
 
 }
