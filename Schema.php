@@ -5,7 +5,6 @@ namespace yii\db\db2;
 use PDO;
 use PDOException;
 use yii\db\Exception;
-use yii\db\QueryBuilder;
 use yii\db\TableSchema;
 
 /**
@@ -334,4 +333,5 @@ SQL;
 
         return $command->queryColumn();
     }
+
 }

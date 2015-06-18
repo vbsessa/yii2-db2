@@ -1,8 +1,9 @@
 <?php
 
+namespace yii\db\db2;
+
 class QueryBuilder extends \yii\db\QueryBuilder
 {
-    public $_mysql;
     public $typeMap = [
         Schema::TYPE_PK => 'integer NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1)',
         Schema::TYPE_BIGPK => 'bigint NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1)',
@@ -54,7 +55,7 @@ class QueryBuilder extends \yii\db\QueryBuilder
 
         $limit = $this->buildLimit($limit, $offset);
         if ($limit != '') {
-            $sql = str_replace(':original_query', $limit, $sql);
+            $sql = str_replace(':original_query', $sql, $limit);
         }
         return $sql;
     }
@@ -65,10 +66,10 @@ class QueryBuilder extends \yii\db\QueryBuilder
             return '';
         }
 
-        $sql = 'SELECT * FROM (SELECT _SUBQUERY.*, ROW_NUMBER() OVER() AS _RN FROM ( :original_query ) AS _SUBQUERY) WHERE :offset_condition :limit_condition';
+        $sql = 'SELECT * FROM (SELECT SUBQUERY_.*, ROW_NUMBER() OVER() AS RN_ FROM ( :original_query ) AS SUBQUERY_) WHERE :offset_condition :limit_condition';
 
-        $sql = $this->hasOffset($offset) ? str_replace(':offset_condition', '_RN > ' . $offset, $sql) : str_replace(':offset_condition', '_RN > 0', $sql);
-        $sql = $this->hasLimit($limit) ? str_replace(':limit_condition', 'AND _RN <= ' . ($limit + $offset), $sql) : str_replace(':limit_condition', '', $sql);
+        $sql = $this->hasOffset($offset) ? str_replace(':offset_condition', 'RN_ > ' . $offset, $sql) : str_replace(':offset_condition', 'RN_ > 0', $sql);
+        $sql = $this->hasLimit($limit) ? str_replace(':limit_condition', 'AND RN_ <= ' . ($limit + $offset), $sql) : str_replace(':limit_condition', '', $sql);
 
         return $sql;
     }
